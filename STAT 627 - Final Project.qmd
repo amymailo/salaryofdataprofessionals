@@ -1,0 +1,889 @@
+---
+title: "Insights into the Salary and Job Market of Data Professionals"
+subtitle: "STAT 627 - Final Project"
+author: "Yu-Yu Chen, Amy Mailo, Katherine McGill"
+date: "December 4, 2023"
+echo: false
+message: false
+warning: false
+number-sections: true
+cache: false
+toc: true
+toc-depth: 2
+format:
+  html:
+    embed-resources: true
+    theme: 
+      light: [cerulean, my_css.scss]
+      dark: [solar, my_css.scss]
+---
+
+```{r}
+# Load libraries
+library(knitr)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+#install.packages("GGally")
+library(GGally)
+library(class)
+#install.packages("corrplot")
+library(corrplot)
+library(ggplot2)
+#install.packages("glmnet")
+library(glmnet)
+#install.packages("caret")
+library(caret)
+#install.packages("ROCR")
+library(ROCR)
+#install.packages(c("rpart", "rpart.plot"))
+library(rpart)
+library(rpart.plot)
+library(boot)
+library(gridExtra)
+library(DT)
+```
+
+# Executive Summary {.unnumbered}
+
+The analysis of data professional salaries and related variables offers crucial insights for career advancement. Notably, extensive experience with specific databases, strategic employment choices such as independent contracting or part-time positions, and roles with management responsibilities correlate positively with higher salaries. Additionally, commitment, stability in job type, and expertise in managing multiple database servers emerge as pivotal factors influencing earning potential in the dynamic data professional landscape.
+
+Professionals aspiring to elevate their standing in the field are advised to specialize in databases, consider alternative employment structures, strategically choose career paths, and invest in continuous professional development. Recognizing the importance of commitment, stability, and server management skills can further enhance one's long-term salary growth prospects.
+
+We used multiple linear regression for inference on the variables that affect salary. The response variable, SalaryUSD, reflects the salary of a data professional in U.S. dollars. We divided these numbers by 1000 to more easily represent SalaryUSD for analysis. For instance, the SalaryUSD of 190 corresponds to 190,000 U.S. dollars. Next, we applied stepwise regression to select the explanatory variables that could be more statistically significant. This helped us choose the best model for salary prediction.
+
+We used logistic regression, decision tree, and SVM models to classify if the data professional was looking for another job or not. The variable LookingForAnotherJob was chosen as the response variable for this part of the analysis because we were able to convert it into a binary in which either the data professional was looking for a job or not. Additionally, we thought it would give us more insight into job stability for data professionals. For our analysis, we made the assumption that looking for another job would indicate that the respondent had lower job satisfaction/stability than a data professional that was not looking for another job.
+
+# Data
+
+## Dataset
+
+The data set contains results from a 2023 Data Professional Salary survey which can be found at this [link](https://colab.research.google.com/corgiredirector?site=https%3A%2F%2Fwww.brentozar.com%2Farchive%2F2023%2F01%2Fannouncing-the-2023-data-professional-salary-survey-results%2F). The data set did not contain any personally identifiable information.
+
+Originally, there were a total of 12,204 rows and 31 columns. The survey results were collected via Google. Here is the [link](https://colab.research.google.com/corgiredirector?site=https%3A%2F%2Fdocs.google.com%2Fforms%2Fd%2Fe%2F1FAIpQLSfwSR9RcQaeb8-kE4FN_v7cdGlyquy-dl99lMvKJLCCW3d1mg%2Fviewanalytics) to the survey itself where we investigated to better understand the context of the questions, the format of the answers, and how the information was collected. Respondents can find the survey on Brent Ozar's blog on a post similar to this one: [link](https://colab.research.google.com/corgiredirector?site=https%3A%2F%2Fwww.brentozar.com%2Farchive%2F2022%2F11%2Fare-you-underpaid-lets-find-out-the-7th-annual-data-professional-salary-survey-is-open%2F) with a hookline of "Are You Underpaid? Let's Find Out" with the incentive that contributing to this open source data will allow you to spot trends for data professionals to better negotiate your own salary.
+
+We identified data professionals seeking a job in the United States as our stakeholders. We want them to have more information about the job market for data professionals and provide them insights into the salary distribution and the likelihood of looking for a job versus not as well as the knowledge to help empower data professionals to negotiate for a better salary.
+
+Concerning ethics, the survey allowed data professionals to voluntarily share their salary details, with the dataset ensuring no personal identifiers were included. Certain ethical considerations were also carefully handled. The survey prioritized obtaining informed consent, making sure participants understood why data was collected and how it would be used. The data was carefully anonymized and secured, which is important considering that the data was collected through a third-party platform such as Google Forms.
+
+For our analysis, we acknowledge potential biases from the voluntary nature of the survey.
+
+## Data Cleaning
+
+The data cleaning process involved managing missing values, filtering nonsensical responses, and managing extreme values.
+
+To select the final set of variables for analysis and reduce the total number of columns from 31 to a more easily analyzable number, we removed columns that were not relevant to our analysis. If the variable had a similar column variable that was more relevant to our analysis, then that is the one we kept.
+
+In deciding which variables to keep, we inspected the dataframe 'salary'. We removed irrelevant variables that we did not think would be as relevant such as Certifications. We considered if the variables had a lot of "Not Asked" as a value. We also considered if the variable was numerical or categorical and if they were still relevant to our analysis.
+
+For example, we kept 'LookingAnotherJob' over 'CareerPlansThisYear' because they asked a similar question. Additionally, the question had more response values as it was asked over more years in the survey data. Also, the 'LookingAnotherJob' variable would allow us to transform it into binary numerical data for classification.
+
+We decided to keep only data for U.S. professionals because the salary averages were highly variable across different countries. Also, we wanted the analysis to be most relevant to the U.S. since that applies to our audience of interest of data professionals seeking jobs in the United States.
+
+We decided to filter the data to show only 40 years or less as the value for YearsWithThisDatabase because there were some nonsensical answers like 1990 years that people answered for the survey question. We can safely assume that someone did not work 1990 years as that far exceeds the average life span of a human being.
+
+We decided to filter the data to show only 90 hours or less as the value for HoursWorkedPerWeek because the values higher than that were extreme and not realistic.
+
+We decided to filter the data to show only values over \$150 for the salary because they represented extreme values that were likely errors. A lot of those rows listed that they were full-time employees and that does not make sense to have \$150 as an annual salary if you work full-time. We made the assumption that they forgot to add some 0s or mis-answered this question. This represented only about 8 observations, so it did not greatly affect our analysis.
+
+```{r}
+# Load dataset and set file name
+data <- "Data_Professional_Salary_Survey_Responses.xlsx - Salary Survey.csv"
+
+# Read file into a data frame
+salary <- read.csv(data)
+```
+
+```{r, results='hide'}
+# Amy- Keep relevant variables
+salary <- salary %>%
+  select(Survey.Year, SalaryUSD, Country, PrimaryDatabase, YearsWithThisDatabase, EmploymentStatus, JobTitle, ManageStaff, YearsWithThisTypeOfJob, OtherPeopleOnYourTeam, DatabaseServers, Education, EducationIsComputerRelated, HoursWorkedPerWeek, PopulationOfLargestCityWithin20Miles, EmploymentSector, LookingForAnotherJob, Gender)
+head(salary)
+```
+
+```{r, results='hide'}
+# Yu-Yu- filter dataframe to only focus on US code
+country <- salary %>%
+  group_by(Country) %>%
+  count() %>%
+  arrange(desc(n))
+head(country)
+salary <- salary %>%
+  filter(Country == "United States")
+head(salary)
+```
+
+```{r, results='hide'}
+# Amy- Keep relevant variables
+salary <- salary %>%
+  select(Survey.Year, SalaryUSD, PrimaryDatabase, YearsWithThisDatabase, EmploymentStatus, JobTitle, ManageStaff, YearsWithThisTypeOfJob, OtherPeopleOnYourTeam, DatabaseServers, Education, EducationIsComputerRelated, HoursWorkedPerWeek, PopulationOfLargestCityWithin20Miles, EmploymentSector, LookingForAnotherJob, Gender)
+head(salary)
+# Country column was removed now from the dataset
+```
+
+```{r, results='hide'}
+# Katherine- Transform the data - 14 categorical variables
+#Categorical
+salary$PrimaryDatabase <- as.factor(salary$PrimaryDatabase)
+salary$EmploymentStatus <- as.factor(salary$EmploymentStatus)
+salary$JobTitle <- as.factor(salary$JobTitle)
+salary$ManageStaff <- as.factor(salary$ManageStaff)
+salary$OtherPeopleOnYourTeam <- as.factor(salary$OtherPeopleOnYourTeam)
+salary$Education <- as.factor(salary$Education)
+salary$EducationIsComputerRelated <- as.factor(salary$EducationIsComputerRelated)
+salary$PopulationOfLargestCityWithin20Miles <- as.factor(salary$PopulationOfLargestCityWithin20Miles)
+salary$EmploymentSector <- as.factor(salary$EmploymentSector)
+salary$LookingForAnotherJob <- as.factor(salary$LookingForAnotherJob)
+salary$Gender <- as.factor(salary$Gender)
+#Numeric
+salary <- salary %>%
+  mutate(SalaryUSD = str_remove_all(SalaryUSD, ","))
+salary$Survey.Year <- as.numeric(salary$Survey.Year)
+salary$SalaryUSD <- as.numeric(salary$SalaryUSD)
+salary$YearsWithThisDatabase <- as.numeric(salary$YearsWithThisDatabase)
+salary$YearsWithThisTypeOfJob <- as.numeric(salary$YearsWithThisTypeOfJob)
+salary$DatabaseServers <- as.numeric(salary$DatabaseServers)
+salary$HoursWorkedPerWeek <- as.numeric(salary$HoursWorkedPerWeek)
+# convert the salary unit in thousands
+salary <- salary %>%
+  mutate(SalaryUSD = SalaryUSD/1000)
+str(salary)
+summary(salary)
+```
+
+```{r, results='hide'}
+# Katherine- Merge some of the categories
+levels(salary$EmploymentStatus)
+#EmploymentStatus
+salary%>%
+  mutate(EmploymentStatus = recode(EmploymentStatus,
+                                    'Full time employee' = "Full time employee",
+                                    'Full time employee of a consulting/contracting company' = "Full time employee",
+                                    'Independent consultant, contractor, freelancer,  or company owner' = "Independent",
+                                    'Independent or freelancer or company owner' = "Independent")) -> salary
+head(salary,3)
+```
+
+```{r, results='hide'}
+# Amy and - Merge some of the categories
+
+# Developer: App code (C#, JS, etc)ArchitectDeveloper: T-SQLDBA (General - splits time evenly between writing & tuning queries AND building & troubleshooting servers)
+#DBA (Development Focus - tunes queries, indexes, does deployments)
+#DBA (Production Focus - build & troubleshoot servers, HA/DR)ManagerDeveloper: Business Intelligence (SSRS, PowerBI, etc)OtherEngineerAnalystData ScientistDBA
+#Principal database engineerDevOps
+#Sr Software Engineer DBA
+#Technician Database SpecialistConsultantSystems AdministratorSr Consultant Analytics consultant
+
+levels(salary$JobTitle)
+
+
+
+#JobTitle
+# Recode JobTitles into broader categories
+salary <- salary %>%
+  mutate(JobTitle = case_when(
+    grepl("Developer", JobTitle) ~ "Developer",
+    grepl("DBA", JobTitle) ~ "Data Base Administrator",
+    grepl("Manager", JobTitle) ~ "Manager",
+    grepl("Architect", JobTitle) ~ "Architect",
+    grepl("Data Scientist", JobTitle) ~ "Data Scientist",
+    grepl("Analyst", JobTitle) ~ "Analyst",
+    grepl("Engineer", JobTitle) ~ "Engineer",
+    TRUE ~ "Other"
+  ))
+
+# Count the number of occurrences in each category
+category_counts <- count(salary, JobTitle)
+
+# Print the result
+print(category_counts)
+```
+
+```{r, results='hide'}
+# Yu-Yu - Merge some of the categories
+levels(salary$LookingForAnotherJob)
+#LookingForAnotherJob
+salary%>%
+  mutate(LookingForAnotherJob = case_when(
+    LookingForAnotherJob == "No" ~ "No",
+    LookingForAnotherJob == "Not Asked" ~ "Not Asked",
+    TRUE ~ "Yes"))-> salary
+head(salary,3)
+```
+
+```{r, results='hide'}
+# Amy - Inspect the data to ensure it prints correctly
+head(salary)
+
+# Print the column names
+column_names <- colnames(salary)
+print(column_names)
+
+# Summary statistics
+summary(salary)
+```
+
+```{r, results='hide'}
+#Amy
+
+#  dplyr filter function
+salary <- salary %>%
+  filter(YearsWithThisDatabase <= 40,
+         HoursWorkedPerWeek <= 90 | is.na(HoursWorkedPerWeek),
+         SalaryUSD > 0.150)
+summary(salary)
+```
+
+```{r, results='hide'}
+#Amy and Yu-Yu
+salary %>%
+  count(Gender)
+
+# We decided to remove the data to get rid of None
+salary <- salary %>%
+  filter(Gender != "None")
+```
+
+# Exploratory Data Analysis
+
+::: panel-tabset
+### Data
+
+```{r}
+DT::datatable(salary)
+```
+
+### Variables
+
+```{r}
+colnames(salary)
+```
+
+### Summary
+
+```{r}
+summary(salary)
+```
+:::
+
+## Variable of Interest: SalaryUSD
+
+The average salary was \$112,329 USD dollars while the median salary for these set of survey respondents was \$106,000. Since the mean is greater than the median, this indicates that the shape of the salary distribution is skewed to the right.
+
+```{r, fig.cap = "Figure 2.1: Boxplot showing the distribution and extreme values of SalaryUSD"}
+#Yu-Yu
+
+salary %>%
+  ggplot(aes(
+      x = `SalaryUSD`)) +
+  geom_boxplot() +
+  theme_light() +
+  theme_bw() +
+  labs(title= "SalaryUSD Distribution")+
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  theme_light() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major.x = element_line(colour = "lightgrey")
+    )
+```
+
+The SalaryUSD Distribution boxplot shows us that we have extreme values that distort the scale of our distribution.
+
+## Numerical Variables
+
+```{r}
+#Katherine
+#Histograms of Numerical Variables
+
+hist1 <- ggplot(data = salary) +
+  geom_histogram(mapping = aes(x=SalaryUSD), color = "black", fill = "purple")
+
+hist2 <- ggplot(data = salary) +
+  geom_histogram(mapping = aes(x=YearsWithThisTypeOfJob), color = "black", fill = "turquoise")
+
+hist3 <- ggplot(data = salary) +
+  geom_histogram(mapping = aes(x=YearsWithThisDatabase), color = "black", fill = "green")
+
+hist4 <- ggplot(data = salary) +
+  geom_histogram(mapping = aes(x=HoursWorkedPerWeek), color = "black", fill = "yellow")
+```
+
+```{r, fig.cap = "Figure 2.2: Histograms showing the distribution of the numerical variables"}
+grid.arrange(hist1, hist2, hist3, hist4, ncol = 2)
+```
+
+These histograms help us learn more about our variables. We are able to see the skewness, spread, center, and extreme values present in the data. The majority of respondents had a SalaryUSD centered around \$100,000. Most of these survey respondents have less than 20 years of experience with this type of job, while the bulk of the survey respondents have less than 20 years of skill exposure to a database such as MySQL or Azure SQL DB. The hours of work per week for data professionals is centered around 40-50 hours per week.
+
+## Categorical Variables
+
+```{r}
+#Katherine
+#Bar Plots of Categorical Variables
+
+#Primary Database
+plot1 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = fct_rev(fct_infreq(PrimaryDatabase)), fill = PrimaryDatabase)) +
+ylab("Count") +
+xlab("Primary Database") +
+  coord_flip()
+
+#Employment Status
+plot2 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = EmploymentStatus, fill = EmploymentStatus)) +
+ylab("Count") +
+xlab("Employment Status")
+
+#Job Title
+plot3 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = fct_rev(fct_infreq(JobTitle)), fill = JobTitle)) +
+ylab("Count") +
+xlab("Job Title") +
+  coord_flip()
+
+#Manage Staff
+plot4 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = ManageStaff, fill = ManageStaff)) +
+ylab("Count") +
+xlab("Manage Staff")
+
+#Other People on Your Team
+plot5 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = OtherPeopleOnYourTeam, fill = OtherPeopleOnYourTeam)) +
+ylab("Count") +
+xlab("Other People on Your Team")
+
+#Education
+plot6 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = fct_rev(fct_infreq(Education)), fill = Education)) +
+ylab("Count") +
+xlab("Education") +
+  coord_flip()
+
+#Education is Computer Related
+plot7 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = EducationIsComputerRelated, fill = EducationIsComputerRelated)) +
+ylab("Count") +
+xlab("Education is Computer Related")
+
+#Population of Largest City within 20 Miles
+plot8 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = fct_rev(fct_infreq(PopulationOfLargestCityWithin20Miles)), fill = PopulationOfLargestCityWithin20Miles)) +
+ylab("Count") +
+xlab("Population of Largest City within 20 Miles") +
+  coord_flip()
+
+#Employment Sector
+plot9 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = fct_rev(fct_infreq(EmploymentSector)), fill = EmploymentSector)) +
+ylab("Count") +
+xlab("Employment Sector") +
+  coord_flip()
+
+#Looking for Another Job
+plot10 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = LookingForAnotherJob, fill = LookingForAnotherJob)) +
+ylab("Count") +
+xlab("Looking for Another Job")
+
+#Gender
+plot11 <- ggplot(data = salary) +
+  geom_bar(mapping = aes(x = fct_rev(fct_infreq(Gender)), fill = Gender)) +
+ylab("Count") +
+xlab("Gender") +
+  coord_flip()
+```
+
+::: panel-tabset
+### Primary Database
+
+```{r, fig.cap = "Figure 2.3: Bar plot showing the count of the PrimaryDatabase variable."}
+plot1
+```
+
+### Employment Status
+
+```{r, fig.cap = "Figure 2.4: Bar plot showing the count of the EmploymentStatus variable."}
+plot2
+```
+
+### Job Title
+
+```{r, fig.cap = "Figure 2.5: Bar plot showing the count of the JobTitle variable."}
+plot3
+```
+
+### Manage Staff
+
+```{r, fig.cap = "Figure 2.6: Bar plot showing the count of the ManageStaff variable."}
+plot4
+```
+
+### People on Your Team
+
+```{r, fig.cap = "Figure 2.7: Bar plot showing the count of the OtherPeopleOnYourTeam variable."}
+plot5
+```
+
+### Education
+
+```{r, fig.cap = "Figure 2.8: Bar plot showing the count of the Education variable."}
+plot6
+```
+
+### Education is Computer Related
+
+```{r, fig.cap = "Figure 2.9: Bar plot showing the count of the EducationIsComputerRelated variable."}
+plot7
+```
+
+### Population of Largest City within 20 Miles
+
+```{r, fig.cap = "Figure 2.10: Bar plot showing the count of the PopulationOfLargestCityWithin20Miles variable."}
+plot8
+```
+
+### Employment Sector
+
+```{r, fig.cap = "Figure 2.11: Bar plot showing the count of the EmploymentSector variable."}
+plot9
+```
+
+### Looking for Another Job
+
+```{r, fig.cap = "Figure 2.12: Bar plot showing the count of the LookingForAnotherJob variable."}
+plot10
+```
+
+### Gender
+
+```{r, fig.cap = "Figure 2.13: Bar plot showing the count of the Gender variable."}
+plot11
+```
+:::
+
+-   There are many more male respondents than female respondents in this survey dataset.
+-   The responses are quite close to being balanced between those looking for a job versus those not looking for a job
+-   A majority of responses come from those who work in the private business sector.
+-   A large proportion of the responses are from people who live in a city or larger.
+-   The majority of respondents have computer-related education.
+-   The majority of respondents hold a bachelor's degree.
+-   The majority of respondents either work with 1 or 0 people on their team.
+-   The minority of respondents manage staff.
+-   The most popular count of job title is Data Base Administrator.
+-   Most of the respondents are full-time employees.
+-   The most popular database that is used Microsoft SQL server.
+
+## Job Titles: In Depth
+
+```{r, fig.cap = "Figure 2.14: Pie Chart showing the % of total for each job title."}
+#Katherine - Pie Chart of Job Titles
+library(dplyr)
+salary %>%
+  group_by(JobTitle) %>%
+  count() -> JobTitleCount
+
+JobTitleCount %>%
+  mutate(percent = round(100*n/sum(JobTitleCount$n))) -> JobTitlePercent
+
+ggplot(JobTitlePercent, aes(x = "", y = percent, fill = JobTitle)) +
+  geom_col() +
+  geom_text(aes(label = percent),
+            position = position_stack(vjust = 0.5)) +
+  coord_polar(theta = "y") +
+  theme_void()
+```
+
+We were interested in the most popular job titles for data professionals. This pie chart shows the proportion of the total that each job title represents. 49% of the survey respondents are Data Base Administrators. This is the most popular job title, followed by 21% who are Developers.
+
+## Correlation
+
+```{r, fig.cap = "Figure 2.15: Correlation Matrix showing the correlation coefficients for the numerical variables."}
+#Amy
+# Identify the numeric columns in dataset
+numeric_columns <- salary[, c("SalaryUSD", "YearsWithThisDatabase", "YearsWithThisTypeOfJob", "DatabaseServers", "HoursWorkedPerWeek")]
+
+# Compute correlation matrix, ignoring NAs
+correlation_matrix <- cor(numeric_columns, use = "complete.obs")
+
+
+# Create a correlation plot
+corrplot(correlation_matrix, method = "color", type = "upper", order = "hclust", tl.col = "black", tl.srt = 45, addCoef.col = "black")
+```
+
+This correlation matrix shows us the correlation matrix for our variables of interest. Here we see there is no presence of multicollinearity as none of the correlation coefficients are 0.7 or higher, which would have indicated a strong correlation between the predictor variables.
+
+```{r, fig.cap = "Figure 2.16: Matrix showing the results of the pairwise comparison."}
+#Yu-Yu
+#| message: false
+# Subset salary dataframe
+salary_subset <- salary[,c("Survey.Year", "YearsWithThisDatabase", "EmploymentStatus", "ManageStaff", "YearsWithThisTypeOfJob", "OtherPeopleOnYourTeam", "PopulationOfLargestCityWithin20Miles", "EmploymentSector", "Gender", "SalaryUSD")]
+# Create ggpairs plot
+ggpairs(salary_subset)
+```
+
+# Regression
+
+## Multiple Linear Regression
+
+The linear regression model reveals that several factors significantly influence salary. Notably, years of experience with a specific database, employment status (particularly for independent contractors and part-time employees), job title (especially for architects and managers), and management responsibilities positively correlate with higher salaries. Additionally, higher education levels, particularly Doctorate/PhD and Masters degrees, and having a computer-related education, are associated with increased salaries. Other key contributors include the number of hours worked per week, the sector of employment (with the Federal government and private business sectors showing positive associations), and individuals not actively looking for another job. Furthermore, males tend to have higher salaries than other gender categories. Overall, these factors collectively contribute to the model's ability to predict salaries, explaining approximately 20.18% of the variance in salary values.
+
+::: panel-tabset
+### Full Model
+
+```{r, attr.output='style="max-height: 500px;"'}
+#Katherine
+salary_model <- lm(SalaryUSD ~ Survey.Year + PrimaryDatabase + YearsWithThisDatabase + EmploymentStatus + JobTitle + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam + DatabaseServers + Education + EducationIsComputerRelated + HoursWorkedPerWeek + PopulationOfLargestCityWithin20Miles + EmploymentSector + LookingForAnotherJob + Gender, data = salary)
+summary(salary_model)
+```
+
+### Reduced Model
+
+```{r, attr.output='style="max-height: 500px;"'}
+#Katherine
+salary_model2 <- lm(SalaryUSD ~ Survey.Year + PrimaryDatabase + YearsWithThisDatabase + EmploymentStatus + JobTitle + ManageStaff + YearsWithThisTypeOfJob + Education + HoursWorkedPerWeek + EmploymentSector + LookingForAnotherJob, data = salary)
+summary(salary_model2)
+```
+:::
+
+## Stepwise Selection
+
+We used stepwise selection on the linear regression model. Stepwise selection helps identify the most influential variables by iteratively adding or removing predictors based on their contribution to model fit. The resulting model shows a meaningful fit (Adjusted R-squared: 0.1911), implying that approximately 19.11% of the salary variability is captured by the included variables. This was minutely different from the adjusted R-squared for the full linear regression model which was 19.18%. This approach provides a more interpretable model by emphasizing the most relevant factors in predicting salary outcomes. Specifically, it removed Survey.Year, PrimaryDatabase, OtherPeopleOnYourTeam, EducationIsComputerRelated, and PopulationOfLargestCityWithin20Miles. These are variables that were not as significant, and in removing them did not significantly impact the model's predictive power.
+
+```{r}
+salaryomit <- na.omit(salary)
+```
+
+::: panel-tabset
+### Selection
+
+```{r, attr.output='style="max-height: 500px;"'}
+#Yu-Yu
+salary_full <- lm(SalaryUSD ~ Survey.Year + PrimaryDatabase + YearsWithThisDatabase + EmploymentStatus + JobTitle + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam + DatabaseServers + Education + EducationIsComputerRelated + HoursWorkedPerWeek + PopulationOfLargestCityWithin20Miles + EmploymentSector + LookingForAnotherJob + Gender, data = salaryomit)
+
+salary_null <- lm(SalaryUSD ~ 1, data = salaryomit)
+
+step_out <- step(salary_null,
+                 scope = list(lower = salary_null, upper = salary_full),
+                 method = "both")
+```
+
+### Stepwise Model
+
+```{r, attr.output='style="max-height: 500px;"'}
+#Yu-Yu
+step_model <- lm(SalaryUSD ~ YearsWithThisDatabase + EmploymentStatus + DatabaseServers + 
+    JobTitle + EmploymentSector + ManageStaff + HoursWorkedPerWeek + 
+    Education + YearsWithThisTypeOfJob + LookingForAnotherJob + 
+    Gender + PrimaryDatabase, data = salaryomit)
+summary(step_model)
+```
+:::
+
+```{r, fig.cap = "Figure 3.1: Plot showing the residuals vs. fitted values."}
+#Amy - Residuals vs Fitted plot of best step regression model above
+plot(step_model, which = 1) #consider homoscedasticity- is there random variance around the horizontal line?
+```
+
+```{r, fig.cap = "Figure 3.2: Normal QQ Plot of the residuals."}
+#Amy - Normal QQ plot to consider normality assumption of residuals. Do the points fall along the diagnol?
+plot(step_model, which = 2)
+```
+
+The plots above are the Residuals vs. Fitted Values plot and the Normal Q-Q Plot. Typically, in a Residuals vs Fitted plot, we're looking for a random scatter that has no distinct pattern. In plot, however, we see that there are a lot of extreme values. For the Normal Q-Q plot, the data points would fall on the 45-degree reference line if the data is normally distributed. This is mostly the case except for the tail.
+
+## Ridge & LASSO
+
+In the Ridge Regression, the optimal lambda value is 1.6, yielding a model with 27 non-zero coefficients. There are 27 because a bulk of our variables have multiple levels. The minimum mean-squared error (PMSE) on the test set is 4312.62.
+
+For Lasso Regression, the optimal lambda is 0.047, resulting in 24 non-zero coefficients. The PMSE on the test set is 4310.08.
+
+Both methods effectively reduce the feature space, with Lasso achieving slightly lower PMSE and fewer non-zero coefficients. The chosen lambda values in both methods help prevent overfitting while maintaining predictive accuracy on the test set.
+
+```{r}
+#Ridge & Lasso- Yu-Yu
+# Preparing data
+set.seed(123)
+Z <- sample(nrow(salary), .5 * nrow(salary))
+salary_train <- salary[Z,]
+salary_test <- salary[-Z,]
+# remove PrimaryDatabase and JobTitle
+reg_train <- lm(SalaryUSD ~ Survey.Year + YearsWithThisDatabase + EmploymentStatus + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam +  PopulationOfLargestCityWithin20Miles + EmploymentSector  + Gender, data = salary_train)
+x_train <- model.matrix(reg_train)[,-1]
+y_train <- salary_train$SalaryUSD
+
+reg_test <- lm(SalaryUSD ~ Survey.Year + YearsWithThisDatabase + EmploymentStatus + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam +  PopulationOfLargestCityWithin20Miles + EmploymentSector  + Gender, data = salary_test)
+x_test <- model.matrix(reg_test)[,-1]
+y_test <- salary_test$SalaryUSD
+```
+
+### Ridge Regression
+
+```{r, results='hide'}
+# Ridge Regression
+set.seed(123)
+r_train_cv <- cv.glmnet(x_train, y_train, alpha = 0)
+r_train_cv
+ridge_min <- glmnet(x_train, y_train, alpha = 0, lambda = r_train_cv$lambda.min)
+yHat <- predict(ridge_min, newx = x_test, s = "lambda.min")
+pmse_r <-  mean((yHat - y_test)^2)
+pmse_r
+ridge_min$df
+```
+
+```{r, fig.cap = "Figure 3.3: Plot showing the cross-validation curve for the Ridge regression."}
+plot(r_train_cv)
+```
+
+### Lasso Regression
+
+```{r, results='hide'}
+# Lasso Regression
+set.seed(123)
+l_train_cv <- cv.glmnet(x_train, y_train)
+l_train_cv
+lasso_min <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.min)
+yHat <- predict(lasso_min, newx = x_test, s = "lambda.min")
+pmse_lmin <- mean((yHat - y_test)^2)
+pmse_lmin
+lasso_min$df
+```
+
+```{r, fig.cap = "Figure 3.4: Plot showing the cross-validation curve for the LASSO regression."}
+plot(l_train_cv)
+```
+
+# Classification
+
+## Logistic Regression
+
+The logistic regression model, focusing on key predictors, reveals insights into factors influencing job search intent among data professionals.
+
+-   Job Title Significance: Certain job titles, including Data Base Administrator, Developer, and Manager, are associated with increased job search intent.
+
+-   Employment Sector Influence: Professionals in private business and local government show potential associations with higher job search intent.
+
+-   Database Technology Impact: Azure SQL DB and Elasticsearch professionals may have higher job search intent.
+
+-   Work Hours and Education: Longer working hours and a Bachelor's degree are linked to increased job search intent.
+
+-   Experience and Management: YearsWithThisTypeOfJob and ManageStaff have no significant impact.
+
+The full model had a mean squared error of 24.97% while the reduced model had a 25.07% mean squared error. Even though the MSE is higher for the reduced model, having less variables did not impact the MSE by much. This helped us justify using the reduced model of variables for improved interpretability.
+
+```{r, results='hide'}
+#Katherine- Logistic Regression
+#Filter 'Not Asked'
+salary1 <- salary %>%
+  filter(Survey.Year < 2020)
+salary1$LookingForAnotherJob <- as.factor(salary1$LookingForAnotherJob)
+levels(salary1$LookingForAnotherJob)
+summary(salary1)
+```
+
+::: panel-tabset
+### Full Model
+
+```{r, attr.output='style="max-height: 500px;"'}
+#Katherine - Logistic Regression
+#Full Model
+logfull <- glm(LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus + JobTitle + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam + DatabaseServers + Education + EducationIsComputerRelated + HoursWorkedPerWeek + PopulationOfLargestCityWithin20Miles + EmploymentSector  + Gender, data = salary1, family = "binomial")
+summary(logfull)
+```
+
+### Reduced Model
+
+```{r, attr.output='style="max-height: 500px;"'}
+#Katherine - Logistic Regression
+#Reduced Model
+logreduced <- glm(LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob,
+              data = salary1, family = "binomial")
+summary(logreduced)
+```
+:::
+
+## K-Fold Cross Validation
+
+For the Full Model, the dataset is split into two classes, "No" and "Yes," resulting in counts of 2346 and 2146, respectively. The binary representation of these classes is denoted as 0 and 1. The calculated misclassification rates for the Full Model are 0.462 and 0.457. In the Reduced Model, a subset of predictor variables is considered. The logistic regression model is built with predictors such as SalaryUSD, YearsWithThisDatabase, EmploymentStatus, JobTitle, EmploymentSector, ManageStaff, HoursWorkedPerWeek, Education, and YearsWithThisTypeOfJob. The K-Fold Cross Validation for the Reduced Model is performed, yielding misclassification rates of 0.452 and 0.449. The reduced model has a slight decrease in classification error rate.
+
+```{r, results='hide'}
+#Katherine - K-Fold Cross Validation
+#Full Model
+set.seed(123)
+
+L <- function(Y, p) {
+  mean(1 * (Y == 1 & p <= .5) | (1 * (Y == 0 & p > .5)),
+       na.rm = TRUE)
+}
+
+salary1$Y <- as.numeric(as.factor(salary1$LookingForAnotherJob)) - 1
+table(salary1$LookingForAnotherJob)
+
+table(salary1$Y)
+
+salary2 <- drop_na(salary1, Y, SalaryUSD, YearsWithThisDatabase, EmploymentStatus, JobTitle, ManageStaff, YearsWithThisTypeOfJob, OtherPeopleOnYourTeam, DatabaseServers, Education, EducationIsComputerRelated, HoursWorkedPerWeek, PopulationOfLargestCityWithin20Miles, EmploymentSector, Gender)
+
+log_reg <- glm(Y ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus + JobTitle + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam + DatabaseServers + Education + EducationIsComputerRelated + HoursWorkedPerWeek + PopulationOfLargestCityWithin20Miles + EmploymentSector  + Gender, data = salary2, family = "binomial")
+
+cv.glm(salary2, log_reg, cost = L, K = 10)$delta
+```
+
+```{r, results='hide'}
+#Katherine - K-Fold Cross Validation
+#Reduced Model
+set.seed(123)
+log_reg_reduced <- glm(Y ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob,
+              data = salary2, family = "binomial")
+
+cv.glm(salary2, log_reg_reduced, cost = L, K = 10)$delta
+```
+
+## Decision Trees
+
+The provided decision tree model is built to predict the likelihood of a job change based on various features. The root node, with a misclassification rate of 48.26%, predicts the majority class "No." The key features used for constructing the tree include HoursWorkedPerWeek, JobTitle, OtherPeopleOnYourTeam, YearsWithThisDatabase, and YearsWithThisTypeOfJob. The top three important variables are HoursWorkedPerWeek (26), YearsWithThisDatabase (22), and YearsWithThisTypeOfJob (19). The tree structure indicates splits based on these features, providing insights into the significance of work hours, job title, team structure, and job-related experience in predicting job changes. The model offers a comprehensive view of the decision-making process, showcasing the impact of each variable on the predicted outcome.
+
+```{r, results='hide'}
+#Amy - Decision tree for LookingForAnotherJob
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Sample data
+Z <- sample(nrow(salary1), 0.5 * nrow(salary1))
+salary1_train <- salary1[Z,]
+salary1_test <- salary1[-Z,]
+
+# Build the decision tree
+tree_model <- rpart(LookingForAnotherJob ~ Survey.Year + PrimaryDatabase + YearsWithThisDatabase + EmploymentStatus + JobTitle + ManageStaff + YearsWithThisTypeOfJob + OtherPeopleOnYourTeam + Education + EducationIsComputerRelated + HoursWorkedPerWeek + PopulationOfLargestCityWithin20Miles + EmploymentSector + Gender,
+                   data = salary1_train,
+                   method = "class")
+
+# Look at variable importance
+printcp(tree_model)
+
+# Evaluate tree model
+predictions_tree <- predict(tree_model, newdata = salary1_test, type = "class")
+
+# Summary
+summary(tree_model)
+
+# Prune
+pruned_tree_model <- prune(tree_model, cp = 0.02)  # TUNE!
+```
+
+```{r, fig.cap = "Figure 4.1: Unpruned Decision Tree for classification of LookingForAnotherJob."}
+# Plot the decision tree with rpart.plot
+prp(tree_model, extra=101, varlen = 0, yesno=2, branch.lty=3, tweak=1.3, box.col="lightblue", shadow.col="gray", fallen.leaves=TRUE)
+```
+
+```{r, fig.cap = "Figure 4.2: Pruned Decision Tree for classification of LookingForAnotherJob."}
+# Plot pruned tree
+prp(pruned_tree_model, extra=101, varlen = 0, yesno=2, branch.lty=3, tweak=1.3, box.col="lightblue", shadow.col="gray", fallen.leaves=TRUE)
+```
+
+## Support Vector Machines (SVM)
+
+The SVM model was developed to forecast the probability of a job change, leveraging essential factors like SalaryUSD, YearsWithThisDatabase, EmploymentStatus, JobTitle, EmploymentSector, ManageStaff, HoursWorkedPerWeek, Education, and YearsWithThisTypeOfJob. Employing various kernel functions, such as linear, polynomial, radial, and sigmoid, the model's performance was systematically evaluated through a 10-fold cross-validation. Notably, the radial kernel emerged as the optimal choice, yielding the lowest misclassification rate of 46.22% compared to other kernels. This thorough tuning process reaffirmed the superiority of the radial kernel, underlining its effectiveness in the context of the dataset. Consequently, the SVM model, particularly when employing the radial kernel, appears promising for predicting job changes based on the specified feature set.
+
+```{r, results='hide'}
+#Amy & Yu-Yu - SVM
+#install.packages("e1071")
+library(e1071)
+# Fit support vector classifier (linear kernel) to training data
+svm_linear_train <- svm(LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob, data = salary1_train, kernel = "linear")
+svm_radial_train <- svm(LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob, data = salary1_train, kernel = "radial")
+svm_poly_train <- svm(LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob, data = salary1_train, kernel = "polynomial")
+svm_sig_train <- svm(LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob, data = salary1_train, kernel = "sigmoid")
+
+
+Yhat_linear <- predict(svm_linear_train, newdata = salary1_test)
+misclass_rate_linear <- mean(Yhat_linear != salary1_test$LookingForAnotherJob)
+misclass_rate_linear
+
+
+Yhat_radial <- predict(svm_radial_train, newdata = salary1_test)
+misclass_rate_radial <- mean(Yhat_radial != salary1_test$LookingForAnotherJob)
+misclass_rate_radial
+
+Yhat_poly <- predict(svm_poly_train, newdata = salary1_test)
+misclass_rate_poly <- mean(Yhat_poly != salary1_test$LookingForAnotherJob)
+misclass_rate_poly
+
+Yhat_sig <- predict(svm_sig_train, newdata = salary1_test)
+misclass_rate_sig <- mean(Yhat_sig != salary1_test$LookingForAnotherJob)
+misclass_rate_sig
+
+set.seed(123)
+SVMtuning <- tune(svm, LookingForAnotherJob ~ SalaryUSD + YearsWithThisDatabase + EmploymentStatus +
+    JobTitle + EmploymentSector + ManageStaff +
+    HoursWorkedPerWeek + Education + YearsWithThisTypeOfJob, data = salary1,
+                  ranges = list(kernel = c("linear", "polynomial", "radial", "sigmoid")))
+SVMtuning
+#Radial is the best parameter with a performance of 47%
+
+1 - SVMtuning$best.performance
+
+summary(SVMtuning) # provides three outputs
+```
+
+```{r, fig.cap = "Figure 4.3: Plot showing performance for each kernel in terms of the prediction error rate."}
+plot(SVMtuning)
+```
+
+## Summary and Conclusions
+
+### Summary of Findings
+
+Our best performing model to predict LookingForAnotherJob was SVM with a radial kernel. It had the lowest misclassification rate, when compared to other kernels as well as the Decision Tree, at 46.22% which means the model made an incorrect prediction for 46.22% of the total observations. Although this is not great, it does yield better results than the other models. This ultimately could be indicative that the data and variables available do not lend themselves to be predictive of either LookingForAnotherJob or SalaryUSD as the linear regression had an even lower performance at around 17-19% adjusted R squared. The 17-19% adjusted R squared is a corrected goodness-of-fit that illustrates that about 17-19% of the variance in the SalaryUSD response variable is explained by the dependent variables.
+
+The analysis of data professional salaries reveals valuable insights for both aspiring and current data professionals seeking to enhance their career prospects. By employing various models, we identified significant variables influencing salary:
+
+YearsWithThisDatabase: A higher number of years of experience with a specific database correlates positively with increased salary. EmploymentStatus: Independent contractors tend to receive higher salaries compared to other employment statuses. JobTitle: Job titles such as architects and managers are associated with higher salaries. Additionally, database administrators and developers exhibit positive correlations with salary. ManageStaff: Those with management responsibilities experience higher salaries. HoursWorkedPerWeek: Increased hours worked per week are linked to a decreased likelihood of actively seeking another job. YearsWithThisTypeOfJob: More years of experience in the current job type are associated with higher salaries. DatabaseServers: The number of database servers has a positive influence on salary. Based on these findings, aspiring data professionals aiming for higher salaries are advised to focus on gaining substantial experience with specific databases, consider independent contracting or part-time positions, pursue roles with management responsibilities, and invest in continuous professional development. Additionally, maintaining a stable employment history is a recommended strategy for maximizing salary potential in the data professional field.
+
+### Relevance to Data Professionals
+
+Experience with Specific Databases: Emphasize gaining extensive experience with specific databases, as it positively correlates with increased salary.
+
+-   Optimal Employment Status: Consider independent contracting positions, as they are associated with higher salaries in the data profession.
+
+-   Strategic Career Paths: Pursue roles with management responsibilities, architects, or managers, as they exhibit positive correlations with higher salaries.
+
+-   Continuous Professional Development: Invest in continuous professional development to maximize salary potential in the data professional field.
+
+-   Hours Worked per Week: Increased hours worked per week are linked to a decreased likelihood of actively seeking another job, indicating the importance of work commitment.
+
+-   Years in Current Job Type: More years of experience in the current job type are associated with higher salaries, emphasizing the value of job stability.
+
+### Recommendations for Future Work
+
+Future work could focus on conducting longitudinal studies that could track salary trends and career progression over time for data professionals. This would be helpful in providing insights into how salaries change overtime for an individual data professional. It would help researchers isolate the order of events and variables occurring to properly assess them for inferring causation for the response variables. For instance, within that larger analysis, there would be room to explore the impact of certifications on career advancement and salary levels for data professionals. There would also be an opportunity to assess metrics beyond salary by asking more in-depth questions that get at job satisfaction for a more comprehensive understanding of the well-being of those working as data professionals. Our dataset showed that the majority of survey respondents working as data professionals were male, so another area of future work could include investigating diversity and inclusion challenges within the data profession to help inform how to address potential disparities.
+
+# Appendix
+
+## Acknowledgments {.appendix}
+
+Katherine found the survey dataset. Yu-Yu, Katherine, and Amy loaded the libraries and cleaned and transformed the data. Katherine generated plots to conduct exploratory data analysis. Katherine did the linear regression, logistic regression, and K-fold cross validation. Yu-Yu helped define which variables would make up the reduced vs full model. Yu-Yu prepared the data to be split into training vs testing to be used in resulting models. Yu-Yu did lasso and ridge regression. Amy did decision trees and SVM models. Amy took notes during each group meeting which helped her draft the summaries given throughout the report. Everyone helped edit and improve these explanations given in the report. Katherine formatted the final version of the report in Quarto, added tabset panels, and added figure captions. Throughout, we helped each other reason through decisions and find good code from our classes to modify and apply.
+
+## Reference {.appendix}
+
+Announcing the 2023 data professional salary survey results. Brent Ozar Unlimited®. (2023, January 2). https://www.brentozar.com/archive/2023/01/announcing-the-2023-data-professional-salary-survey-results/
+
+## Code {.appendix}
+
+```{r, show-code, ref.label=all_labels(), echo = TRUE, eval=FALSE}
+
+```
